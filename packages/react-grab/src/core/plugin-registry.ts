@@ -37,7 +37,7 @@ const DEFAULT_OPTIONS: OptionsState = {
   activationMode: "toggle",
   keyHoldDuration: DEFAULT_KEY_HOLD_DURATION_MS,
   allowActivationInsideInput: true,
-  maxContextLines: 3,
+  maxContextLines: 10,
   activationKey: undefined,
   getContent: undefined,
 };

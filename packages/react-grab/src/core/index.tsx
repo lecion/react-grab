@@ -65,6 +65,7 @@ import { DEFAULT_THEME } from "./theme.js";
 import { createPluginRegistry } from "./plugin-registry.js";
 import { createAgentManager } from "./agent/index.js";
 import { createArrowNavigator } from "./arrow-navigation.js";
+import { frameworkDetector, FrameworkType } from "./framework-detector.js";
 import {
   getRequiredModifiers,
   setupKeyboardEventClaimer,
@@ -89,7 +90,7 @@ export const init = (rawOptions?: Options): ReactGrabAPI => {
     activationMode: "toggle",
     keyHoldDuration: DEFAULT_KEY_HOLD_DURATION_MS,
     allowActivationInsideInput: true,
-    maxContextLines: 3,
+    maxContextLines: 10,
     ...scriptOptions,
     ...rawOptions,
   };
@@ -100,6 +101,44 @@ export const init = (rawOptions?: Options): ReactGrabAPI => {
   hasInited = true;
 
   logIntro();
+
+  // Detect and log framework with intelligent retry mechanism
+  const detectedFramework = frameworkDetector.detect();
+
+  if (detectedFramework !== FrameworkType.UNKNOWN) {
+    // Framework detected immediately
+    console.log(`[React Grab] Framework detected: ${detectedFramework}`);
+  } else {
+    // Framework not detected yet - start intelligent retry with exponential backoff
+    // This handles cases where the script loads before the framework is fully initialized
+    const retryDelays = [100, 300, 1000, 3000]; // Fast → Slow (covers 0-4.4s load time)
+    let retryIndex = 0;
+    let frameworkDetected = false;
+
+    const retryDetection = () => {
+      if (frameworkDetected) return;
+
+      const reDetected = frameworkDetector.detect();
+
+      if (reDetected !== FrameworkType.UNKNOWN) {
+        frameworkDetected = true;
+        console.log(`[React Grab] Framework detected: ${reDetected}`);
+        return;
+      }
+
+      // Schedule next retry if available
+      retryIndex++;
+      if (retryIndex < retryDelays.length) {
+        setTimeout(retryDetection, retryDelays[retryIndex]);
+      } else {
+        // All retries exhausted, log unknown
+        console.log(`[React Grab] Framework detected: ${FrameworkType.UNKNOWN}`);
+      }
+    };
+
+    // Start first retry
+    setTimeout(retryDetection, retryDelays[0]);
+  }
 
   return createRoot((dispose) => {
     const pluginRegistry = createPluginRegistry(initialOptions);

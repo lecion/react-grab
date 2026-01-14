@@ -64,6 +64,7 @@ interface GrabbedBoxInfo {
 
 interface ReactGrabPageObject {
   page: Page;
+  gotoVue2Page: () => Promise<void>;
   activate: () => Promise<void>;
   activateViaKeyboard: () => Promise<void>;
   deactivate: () => Promise<void>;
@@ -1633,8 +1634,14 @@ const createReactGrabPageObject = (page: Page): ReactGrabPageObject => {
     return callback?.args ?? [];
   };
 
+  const gotoVue2Page = async () => {
+    await page.goto('/vue2.html');
+    await page.waitForLoadState('networkidle');
+  };
+
   return {
     page,
+    gotoVue2Page,
     activate,
     activateViaKeyboard,
     deactivate,

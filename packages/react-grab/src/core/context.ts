@@ -1,100 +1,74 @@
+import { isSourceFile, normalizeFileName } from "bippy/source";
+import { frameworkDetector } from "./framework-detector.js";
+import type { FrameworkStackFrame } from "./frameworks/types.js";
 import {
-  isSourceFile,
-  normalizeFileName,
   getOwnerStack,
   StackFrame,
 } from "bippy/source";
-import { isCapitalized } from "../utils/is-capitalized.js";
 import { getFiberFromHostInstance, isInstrumentationActive, getDisplayName, isCompositeFiber } from "bippy";
+import {
+  checkIsNextProject as reactCheckIsNextProject,
+} from "./frameworks/react-detector.js";
 
-const NEXT_INTERNAL_COMPONENT_NAMES = new Set([
-  "InnerLayoutRouter",
-  "RedirectErrorBoundary",
-  "RedirectBoundary",
-  "HTTPAccessFallbackErrorBoundary",
-  "HTTPAccessFallbackBoundary",
-  "LoadingBoundary",
-  "ErrorBoundary",
-  "InnerScrollAndFocusHandler",
-  "ScrollAndFocusHandler",
-  "RenderFromTemplateContext",
-  "OuterLayoutRouter",
-  "body",
-  "html",
-  "DevRootHTTPAccessFallbackBoundary",
-  "AppDevOverlayErrorBoundary",
-  "AppDevOverlay",
-  "HotReload",
-  "Router",
-  "ErrorBoundaryHandler",
-  "AppRouter",
-  "ServerRoot",
-  "SegmentStateProvider",
-  "RootErrorBoundary",
-  "LoadableComponent",
-  "MotionDOMComponent",
-]);
+/**
+ * Re-export checkIsNextProject for backward compatibility
+ */
+export const checkIsNextProject = reactCheckIsNextProject;
 
-const REACT_INTERNAL_COMPONENT_NAMES = new Set([
-  "Suspense",
-  "Fragment",
-  "StrictMode",
-  "Profiler",
-  "SuspenseList",
-]);
-
-export const checkIsNextProject = (): boolean => {
-  if (typeof document === "undefined") return false;
-  return Boolean(
-    document.getElementById("__NEXT_DATA__") ||
-      document.querySelector("nextjs-portal"),
-  );
-};
-
+/**
+ * Check if a component name is internal/built-in
+ * Delegates to the active framework detector
+ */
 export const checkIsInternalComponentName = (name: string): boolean => {
-  if (name.startsWith("_")) return true;
-  if (NEXT_INTERNAL_COMPONENT_NAMES.has(name)) return true;
-  if (REACT_INTERNAL_COMPONENT_NAMES.has(name)) return true;
-  return false;
+  const detector = frameworkDetector.getDetector();
+  if (!detector) return false;
+
+  return detector.checkIsInternalComponentName(name);
 };
 
+/**
+ * Check if a component name is a valid user source component
+ * Delegates to the active framework detector
+ */
 export const checkIsSourceComponentName = (name: string): boolean => {
-  if (name.length <= 1) return false;
-  if (checkIsInternalComponentName(name)) return false;
-  if (!isCapitalized(name)) return false;
-  if (name.startsWith("Primitive.")) return false;
-  if (name.includes("Provider") && name.includes("Context")) return false;
-  return true;
+  const detector = frameworkDetector.getDetector();
+  if (!detector) return false;
+
+  return detector.checkIsSourceComponentName(name);
 };
 
+/**
+ * Get component stack trace from a DOM element
+ * Automatically uses the appropriate framework detector
+ */
 export const getStack = async (
   element: Element,
-): Promise<StackFrame[] | null> => {
-  if (!isInstrumentationActive()) return [];
+): Promise<FrameworkStackFrame[] | null> => {
+  const detector = frameworkDetector.getDetector();
+  if (!detector) return [];
 
   try {
-    const fiber = getFiberFromHostInstance(element);
-    if (!fiber) return null;
-    return await getOwnerStack(fiber);
+    return await detector.getStack(element);
   } catch {
     return null;
   }
 };
 
+/**
+ * Get the nearest user-defined component name from a DOM element
+ * Filters out framework internal components
+ */
 export const getNearestComponentName = async (
   element: Element,
 ): Promise<string | null> => {
-  if (!isInstrumentationActive()) return null;
-  const stack = await getStack(element);
-  if (!stack) return null;
+  const detector = frameworkDetector.getDetector();
+  if (!detector) return null;
 
-  for (const frame of stack) {
-    if (frame.functionName && checkIsSourceComponentName(frame.functionName)) {
-      return frame.functionName;
-    }
+  try {
+    return await detector.getNearestComponentName(element);
+  } catch {
+    return null;
   }
-
-  return null;
 };
 
 const isUsefulComponentName = (name: string): boolean => {
@@ -151,24 +125,33 @@ export const getElementContext = async (
         );
         continue;
       }
-      if (frame.fileName && isSourceFile(frame.fileName)) {
+
+      const isValidSourceFile = frame.fileName && isSourceFile(frame.fileName);
+      const hasValidComponentName = frame.functionName && checkIsSourceComponentName(frame.functionName);
+
+      // Show frame if it has a valid source file or valid component name
+      // Note: frame.fileName may be undefined in production builds (e.g., Vue2 without __file)
+      if (isValidSourceFile || hasValidComponentName) {
         let line = "\n  in ";
-        const hasComponentName =
-          frame.functionName && checkIsSourceComponentName(frame.functionName);
 
-        if (hasComponentName) {
-          line += `${frame.functionName} (at `;
+        if (hasValidComponentName) {
+          line += `${frame.functionName}`;
         }
 
-        line += normalizeFileName(frame.fileName);
+        if (frame.fileName) {
+          line += ` (at ${normalizeFileName(frame.fileName)})`;
 
-        // HACK: bundlers like vite mess up the line number and column number
-        if (isNextProject && frame.lineNumber && frame.columnNumber) {
-          line += `:${frame.lineNumber}:${frame.columnNumber}`;
+          // HACK: bundlers like vite mess up the line number and column number
+          if (isNextProject && frame.lineNumber && frame.columnNumber) {
+            line += `:${frame.lineNumber}:${frame.columnNumber}`;
+          }
+        } else if (hasValidComponentName) {
+          line += ` (at <source>)`;
         }
 
-        if (hasComponentName) {
-          line += `)`;
+        // Append route info if present
+        if (frame.routeInfo) {
+          line += ` ← router-view: ${frame.routeInfo.path}`;
         }
 
         stackContext.push(line);

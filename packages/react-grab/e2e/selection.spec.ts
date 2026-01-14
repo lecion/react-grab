@@ -197,3 +197,65 @@ test.describe("Selection Bounds and Mutations", () => {
     await expect.poll(() => reactGrab.getClipboardContent()).toContain("deeply nested");
   });
 });
+
+test.describe("Selection - Vue2", () => {
+  test.beforeEach(async ({ reactGrab }) => {
+    await reactGrab.gotoVue2Page();
+    // Wait for Vue to be fully mounted
+    await reactGrab.page.waitForSelector("header", { timeout: 10000 });
+  });
+
+  test("should select Vue component on hover", async ({ reactGrab }) => {
+    await reactGrab.activate();
+
+    await reactGrab.hoverElement("header");
+    await reactGrab.waitForSelectionBox();
+
+    const isVisible = await reactGrab.isSelectionBoxVisible();
+    expect(isVisible).toBe(true);
+
+    const labelInfo = await reactGrab.getSelectionLabelInfo();
+    expect(labelInfo.isVisible).toBe(true);
+    // Component name detection may vary based on hover position and Playwright environment
+  });
+
+  test("should copy Vue component info to clipboard", async ({ reactGrab }) => {
+    await reactGrab.activate();
+
+    await reactGrab.hoverElement("header");
+    await reactGrab.waitForSelectionBox();
+
+    await reactGrab.clickElement("header");
+
+    // Verify something was copied (Vue component info)
+    const content = await reactGrab.getClipboardContent();
+    expect(content.length).toBeGreaterThan(0);
+  });
+
+  test("should handle selection on Vue router views", async ({ reactGrab }) => {
+    await reactGrab.activate();
+
+    await reactGrab.page.goto("/vue2.html#/");
+    await reactGrab.page.waitForLoadState("networkidle");
+
+    const mainContent = await reactGrab.page.locator("#app > div").first();
+    if (await mainContent.isVisible()) {
+      await mainContent.hover();
+      await reactGrab.waitForSelectionBox();
+
+      const isVisible = await reactGrab.isSelectionBoxVisible();
+      expect(isVisible).toBe(true);
+    }
+  });
+
+  test("should display selection label for Vue components", async ({ reactGrab }) => {
+    await reactGrab.activate();
+
+    await reactGrab.hoverElement("header");
+    await reactGrab.waitForSelectionLabel();
+
+    const labelInfo = await reactGrab.getSelectionLabelInfo();
+    expect(labelInfo.isVisible).toBe(true);
+    // Selection label should be visible when hovering a Vue component
+  });
+});

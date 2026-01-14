@@ -205,3 +205,45 @@ test.describe("Activation Mode Configuration", () => {
     expect(typeof state.isActive).toBe("boolean");
   });
 });
+
+test.describe("Activation - Vue2", () => {
+  test.beforeEach(async ({ reactGrab }) => {
+    await reactGrab.gotoVue2Page();
+  });
+
+  test("should activate on Vue2 page", async ({ reactGrab }) => {
+    const isVisibleBefore = await reactGrab.isOverlayVisible();
+    expect(isVisibleBefore).toBe(false);
+
+    await reactGrab.activate();
+
+    const isVisibleAfter = await reactGrab.isOverlayVisible();
+    expect(isVisibleAfter).toBe(true);
+  });
+
+  test("should deactivate on Vue2 page", async ({ reactGrab }) => {
+    await reactGrab.activate();
+    expect(await reactGrab.isOverlayVisible()).toBe(true);
+
+    await reactGrab.deactivate();
+
+    expect(await reactGrab.isOverlayVisible()).toBe(false);
+  });
+
+  test("should activate via keyboard on Vue2 page", async ({ reactGrab }) => {
+    await reactGrab.activateViaKeyboard();
+
+    expect(await reactGrab.isOverlayVisible()).toBe(true);
+  });
+
+  test("should toggle activation state on Vue2 page", async ({ reactGrab }) => {
+    await reactGrab.activate();
+    expect(await reactGrab.isOverlayVisible()).toBe(true);
+
+    await reactGrab.deactivate();
+    expect(await reactGrab.isOverlayVisible()).toBe(false);
+
+    await reactGrab.activate();
+    expect(await reactGrab.isOverlayVisible()).toBe(true);
+  });
+});
